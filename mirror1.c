@@ -7,10 +7,15 @@
 #include <dirent.h>
 #include <sys/stat.h>
 #include <fcntl.h>
+
 #include <arpa/inet.h>
+
 #include <stdbool.h>
+
 #include <limits.h>
+
 #include <ctype.h>
+
 #include <time.h>
 
 #define PORT 54321
@@ -23,9 +28,9 @@
 #define RESPONSE_TEXT 1
 #define RESPONSE_ZIP 2
 
-int connection_counter = 0;
-// Function to send response to client based on type
 int send_response(char * content, int type, int client_socket);
+int connection_counter = 0;
+
 int send_response(char * content, int type, int client_socket) {
   // Send the response type indicator
   send(client_socket, & type, sizeof(type), 0);
@@ -58,7 +63,7 @@ int send_response(char * content, int type, int client_socket) {
 
   return 0; // Indicate success
 }
-// Function to remove leading and trailing spaces from a string
+
 void removeLeadingTrailingSpaces(char * str) {
   int i = 0, j = strlen(str) - 1;
 
@@ -78,7 +83,6 @@ void removeLeadingTrailingSpaces(char * str) {
   // Null-terminate the string
   str[j - i + 1] = '\0';
 }
-// Function to extract root operation from command
 char * get_root_operation(char * command) {
   char * str;
 
@@ -91,7 +95,7 @@ char * get_root_operation(char * command) {
 
   return NULL;
 }
-// Function to find files within a size range in a directory
+
 int find_files_of_sizes(const char * dir_path, int size1, int size2, int * num_of_files) {
   DIR * direc;
   struct dirent * direc_entry;
@@ -140,7 +144,7 @@ int find_files_of_sizes(const char * dir_path, int size1, int size2, int * num_o
   fclose(fp);
   return 0;
 }
-// Function to extract sizes from command
+
 void get_sizes(int * size1, int * size2, char * command_sz) {
   // Extract the first token
   char * ptr = strtok(command_sz, " ");
@@ -161,7 +165,6 @@ void get_sizes(int * size1, int * size2, char * command_sz) {
     }
   }
 }
-// Function to compress files into a tarball
 int compress_files(char file_paths[DIR_THRESHOLD_MAX][LENGTH_MAX], int num_of_files) {
   char tar_command[LENGTH_MAX * DIR_THRESHOLD_MAX + 100]; // Allocate enough space for the command
   const char * directory = "w24project";
@@ -243,7 +246,7 @@ int find_files_after_date(const char * dir_path,
   time_t target_time = mktime( & tm_date);
 
   time_t current_time = time(NULL);
-  time_t two_minutes_before = current_time - 30; // 2 minutes before the current time
+  time_t two_minutes_before = current_time - 180; // 3 minutes before the current time
 
   DIR * directory = opendir(dir_path);
   if (directory == NULL) {
@@ -290,7 +293,7 @@ void handle_date_command(const char * command, int client_socket) {
     find_files_before_date(getenv("HOME"), date, file_paths, & num_of_files);
     // Compress and send the files
     if (compress_files(file_paths, num_of_files) == 0) {
-      send_response(ZIP_FILE_NAME, RESPONSE_ZIP, client_socket);
+      send_response("The tar file has been generated successfully and stored at w24project/temp.tar.gz", RESPONSE_TEXT, client_socket);
     } else {
       send_response("Error compressing files", RESPONSE_TEXT, client_socket);
     }
@@ -300,7 +303,7 @@ void handle_date_command(const char * command, int client_socket) {
     find_files_after_date(getenv("HOME"), date, file_paths, & num_of_files);
     // Compress and send the files
     if (compress_files(file_paths, num_of_files) == 0) {
-      send_response(ZIP_FILE_NAME, RESPONSE_ZIP, client_socket);
+      send_response("The tar file has been generated successfully and stored at w24project/temp.tar.gz", RESPONSE_TEXT, client_socket);
     } else {
       send_response("Error compressing files", RESPONSE_TEXT, client_socket);
     }
@@ -308,7 +311,7 @@ void handle_date_command(const char * command, int client_socket) {
     send_response("Invalid command", RESPONSE_TEXT, client_socket);
   }
 }
-// Function to handle client requests
+//Crequest to handle client requests
 void crequest(int client_socket) {
   char command[INPUT_THREASHOLD];
   int n;
@@ -325,17 +328,16 @@ void crequest(int client_socket) {
       close(client_socket);
       return; // Terminate the function after closing the socket
     }
-
     // Parse command and perform action
-    if (strncmp(command, "quitc", 5) == 0) {
-      // Client requested to quit
-      printf("Client requested to quit\n");
-      // Optionally, send a response to the client indicating it can close the connection
-      char * quit_msg = "Server closing connection.";
-      send_response(quit_msg, RESPONSE_TEXT, client_socket);
-      close(client_socket);
-      return; // Terminate the function after closing the socket
-    } else if (strcmp(command, "dirlist -a\n") == 0) {
+     if (strncmp(command, "quitc", 5) == 0) {
+            // Client requested to quit
+            printf("Client requested to quit\n");
+            // Optionally, send a response to the client indicating it can close the connection
+            char* quit_msg = "Server closing connection.";
+            send_response(quit_msg, RESPONSE_TEXT, client_socket);
+            close(client_socket);
+            return; // Terminate the function after closing the socket
+     }else if (strcmp(command, "dirlist -a\n") == 0) {
       // Execute command and send output to client
       FILE * fp;
       char path[1035];
@@ -403,10 +405,8 @@ void crequest(int client_socket) {
       if (strcmp(operation, "w24fn") == 0) {
         char * token = strtok(command_copy1, " ");
         char file_name[LENGTH_MAX]; // Use a statically allocated array
-        printf("token1: %s\n", token);
         if (token != NULL) {
           token = strtok(NULL, " ");
-          printf("token2: %s\n", token);
           if (token != NULL) { // Ensure token is not NULL before copying
             strncpy(file_name, token, LENGTH_MAX);
             file_name[LENGTH_MAX - 1] = '\0'; // Ensure null-termination
@@ -437,6 +437,7 @@ void crequest(int client_socket) {
         contents[bytes_read] = '\0';
         if (bytes_read == 0) {
           printf("File not found\n");
+          send_response("File not found", RESPONSE_TEXT, client_socket);
         } else {
           //send(client_socket, contents, strlen(contents), 0);
           send_response(contents, RESPONSE_TEXT, client_socket);
@@ -470,11 +471,11 @@ void crequest(int client_socket) {
           int status = system(buffer);
           if (status == 0) {
             // Sending the file(compressed) from Server -> Client.
-            int tr_status = send_response(ZIP_FILE_NAME, RESPONSE_ZIP, client_socket);
+            int tr_status = send_response("The tar file has been generated successfully and stored at w24project/temp.tar.gz", RESPONSE_TEXT, client_socket);
             if (tr_status != 0) {
-              printf("Error occured in transferring the file(s).\n");
+              printf("Error occured in compressing the file(s).\n");
             } else {
-              printf("File transfer successfully completed.\n");
+              printf("File compressed successfully\n");
             }
           } else {
             printf("Error in executing the command.\n");
@@ -526,6 +527,7 @@ void crequest(int client_socket) {
         // Construct the find command with the specified extensions
         char find_command[BUFFER_SIZE] = "find ~/ -type f \\( ";
         for (int i = 0; i < ext_count; i++) {
+            removeLeadingTrailingSpaces(extensions[i]);
           if (i > 0) {
             strcat(find_command, "-o ");
           }
@@ -535,8 +537,6 @@ void crequest(int client_socket) {
         }
         strcat(find_command, "\\) > ");
         strcat(find_command, TEMP_DUMP_TXT);
-        printf("\ncc: %s\n", find_command);
-
         // Execute the find command
         int find_status = system(find_command);
         if (find_status != 0) {
@@ -556,7 +556,7 @@ void crequest(int client_socket) {
             printf("Directory '%s' removed successfully.\n", directory_name);
           }
           // No files found, send message to client
-          send_response("No file found.", RESPONSE_TEXT, client_socket);
+          send_response("No file found", RESPONSE_TEXT, client_socket);
         } else {
           // Files found, create tarball and send
           char tar_command[BUFFER_SIZE];
@@ -564,9 +564,14 @@ void crequest(int client_socket) {
           int tar_status = system(tar_command);
           if (tar_status == 0) {
             // Tarball created successfully, send it to the client
-            send_response(ZIP_FILE_NAME, RESPONSE_ZIP, client_socket);
+            int tr_status = send_response("The tar file has been generated successfully and stored at w24project/temp.tar.gz", RESPONSE_TEXT, client_socket);
+            //send_response(ZIP_FILE_NAME, RESPONSE_ZIP, client_socket);
+            if (tr_status != 0) {
+              printf("Error occured in compressing the file(s).\n");
+            } else {
+              printf("File compressed successfully\n");
+            }
           } else {
-            printf("Error creating tar\n");
             send_response("Error creating tar", RESPONSE_TEXT, client_socket);
           }
         }
