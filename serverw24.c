@@ -1,29 +1,16 @@
 #include <stdio.h>
-
 #include <stdlib.h>
-
 #include <unistd.h>
-
 #include <string.h>
-
 #include <sys/socket.h>
-
 #include <netinet/in.h>
-
 #include <dirent.h>
-
 #include <sys/stat.h>
-
 #include <fcntl.h>
-
 #include <arpa/inet.h>
-
 #include <stdbool.h>
-
 #include <limits.h>
-
 #include <ctype.h>
-
 #include <time.h>
 
 #define PORT 4222
@@ -292,7 +279,7 @@ int find_files_after_date(const char * dir_path,
   time_t target_time = mktime( & tm_date);
 
   time_t current_time = time(NULL);
-  time_t two_minutes_before = current_time - 30; // 2 minutes before the current time
+  time_t two_minutes_before = current_time - 180; // 3 minutes before the current time
 
   DIR * directory = opendir(dir_path);
   if (directory == NULL) {
@@ -339,7 +326,7 @@ void handle_date_command(const char * command, int client_socket) {
     find_files_before_date(getenv("HOME"), date, file_paths, & num_of_files);
     // Compress and send the files
     if (compress_files(file_paths, num_of_files) == 0) {
-      send_response(ZIP_FILE_NAME, RESPONSE_ZIP, client_socket);
+      send_response("The tar file has been generated successfully and stored at w24project/temp.tar.gz", RESPONSE_TEXT, client_socket);
     } else {
       send_response("Error compressing files", RESPONSE_TEXT, client_socket);
     }
@@ -349,7 +336,7 @@ void handle_date_command(const char * command, int client_socket) {
     find_files_after_date(getenv("HOME"), date, file_paths, & num_of_files);
     // Compress and send the files
     if (compress_files(file_paths, num_of_files) == 0) {
-      send_response(ZIP_FILE_NAME, RESPONSE_ZIP, client_socket);
+      send_response("The tar file has been generated successfully and stored at w24project/temp.tar.gz", RESPONSE_TEXT, client_socket);
     } else {
       send_response("Error compressing files", RESPONSE_TEXT, client_socket);
     }
@@ -483,6 +470,7 @@ void crequest(int client_socket) {
         contents[bytes_read] = '\0';
         if (bytes_read == 0) {
           printf("File not found\n");
+          send_response("File not found", RESPONSE_TEXT, client_socket);
         } else {
           //send(client_socket, contents, strlen(contents), 0);
           send_response(contents, RESPONSE_TEXT, client_socket);
@@ -516,12 +504,11 @@ void crequest(int client_socket) {
           int status = system(buffer);
           if (status == 0) {
             // Sending the file(compressed) from Server -> Client.
-            int tr_status = send_response(ZIP_FILE_NAME, RESPONSE_ZIP, client_socket);
+            int tr_status = send_response("The tar file has been generated successfully and stored at w24project/temp.tar.gz", RESPONSE_TEXT, client_socket);
             if (tr_status != 0) {
-              printf("Error occured in transferring the file(s).\n");
+              printf("Error occured in compressing the file(s).\n");
             } else {
-              printf("File transfer successfully completed.\n");
-              send_response("File transfer successfully completed.", RESPONSE_TEXT, client_socket);
+              printf("File compressed successfully\n");
             }
           } else {
             printf("Error in executing the command.\n");
@@ -573,6 +560,7 @@ void crequest(int client_socket) {
         // Construct the find command with the specified extensions
         char find_command[BUFFER_SIZE] = "find ~/ -type f \\( ";
         for (int i = 0; i < ext_count; i++) {
+            remove_ldtr_spaces(extensions[i]);
           if (i > 0) {
             strcat(find_command, "-o ");
           }
@@ -582,7 +570,6 @@ void crequest(int client_socket) {
         }
         strcat(find_command, "\\) > ");
         strcat(find_command, TEMP_DUMP_TXT);
-
         // Execute the find command
         int find_status = system(find_command);
         if (find_status != 0) {
@@ -610,7 +597,13 @@ void crequest(int client_socket) {
           int tar_status = system(tar_command);
           if (tar_status == 0) {
             // Tarball created successfully, send it to the client
-            send_response(ZIP_FILE_NAME, RESPONSE_ZIP, client_socket);
+            int tr_status = send_response("The tar file has been generated successfully and stored at w24project/temp.tar.gz", RESPONSE_TEXT, client_socket);
+            //send_response(ZIP_FILE_NAME, RESPONSE_ZIP, client_socket);
+            if (tr_status != 0) {
+              printf("Error occured in compressing the file(s).\n");
+            } else {
+              printf("File compressed successfully\n");
+            }
           } else {
             send_response("Error creating tar", RESPONSE_TEXT, client_socket);
           }
