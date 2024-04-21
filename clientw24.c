@@ -66,81 +66,61 @@ int receive_response_from_server(int client_socket) {
   int type;
   ssize_t bytes_received;
   char buffer[BUFFER_SIZE];
-  struct timeval tv;
-  fd_set readfds;
 
-  // Set timeout for receiving data (e.g., 5 seconds)
-  tv.tv_sec = 5;
-  tv.tv_usec = 0;
 
-  FD_ZERO(&readfds);
-  FD_SET(client_socket, &readfds);
-
-  // Wait for the socket to be ready for reading
-  int select_result = select(client_socket + 1, &readfds, NULL, NULL, &tv);
-   if (select_result == -1) {
-    perror("select error");
-    return client_socket;
-  } else if (select_result == 0) {
-    printf("Timeout occurred! No data received.\n");
-    return client_socket;
-  }
-    if (FD_ISSET(client_socket, &readfds)) {
-  // Receive response type
-  bytes_received = recv(client_socket, & type, sizeof(type), 0);
-  if (bytes_received <= 0) {
-    perror("Failed to receive the type of response");
-    return client_socket; // Return the original client socket
-  }
-
-  if (type == RESPONSE_TEXT) {
-    // Receive text response
-    memset(buffer, 0, BUFFER_SIZE); // Clear buffer
-    bytes_received = recv(client_socket, buffer, BUFFER_SIZE - 1, 0);
+    // Receive response type
+    bytes_received = recv(client_socket, &type, sizeof(type), 0);
     if (bytes_received <= 0) {
-      perror("Failed to receive text response");
-      return client_socket; // Return the original client socket
-    }
-    buffer[bytes_received] = '\0'; // Null-terminate the string
-    printf("%s\n", buffer);
-    
-    if (strcmp(buffer, "Server closing connection.") == 0) {
-      close(client_socket);
-      printf("Connection termination success\n");
-      exit(EXIT_SUCCESS);
-    }
-    if (strcmp(buffer, "M1") == 0) {
-      close(client_socket);
-      establish_connection_to_mirror(MIRROR_1_PORT, client_socket);
-    }
-    if (strcmp(buffer, "M2") == 0) {
-      close(client_socket);
-      establish_connection_to_mirror(MIRROR_2_PORT, client_socket);
-    }
-  } else if (type == RESPONSE_ZIP) {
-    // Receive file contents
-    FILE * fp = fopen("received_file.tar.gz", "wb");
-    if (fp == NULL) {
-      perror("Failed to open file for writing");
+      perror("Failed to receive the type of response");
       return client_socket; // Return the original client socket
     }
 
-    while ((bytes_received = recv(client_socket, buffer, BUFFER_SIZE, 0)) > 0) {
-      fwrite(buffer, 1, bytes_received, fp);
-    }
+    if (type == RESPONSE_TEXT) {
+      // Receive text response
+      memset(buffer, 0, BUFFER_SIZE); // Clear buffer
+      bytes_received = recv(client_socket, buffer, BUFFER_SIZE - 1, 0);
+      if (bytes_received <= 0) {
+        perror("Failed to receive text response");
+        return client_socket; // Return the original client socket
+      }
+      buffer[bytes_received] = '\0'; // Null-terminate the string
+      printf("%s\n", buffer);
 
-    if (bytes_received < 0) {
-      perror("Failed to receive file contents");
-    } else {
+      if (strcmp(buffer, "Server closing connection.") == 0) {
+        close(client_socket);
+        printf("Connection termination success\n");
+        exit(EXIT_SUCCESS);
+      }
+      if (strcmp(buffer, "M1") == 0) {
+        close(client_socket);
+        return establish_connection_to_mirror(MIRROR_1_PORT, 1);
+      }
+      if (strcmp(buffer, "M2") == 0) {
+        close(client_socket);
+        return establish_connection_to_mirror(MIRROR_2_PORT, 2);
+      }
+    } else if (type == RESPONSE_ZIP) {
+      // Receive file contents
+        printf("Inside zip receivance");
+      FILE * fp = fopen("received_file.tar.gz", "wb");
+      if (fp == NULL) {
+        perror("Failed to open file for writing");
+        return client_socket; // Return the original client socket
+      }
+              printf("Inside zip receivance: before while");
+      while ((bytes_received = recv(client_socket, buffer, BUFFER_SIZE, 0)) > 0) {
+        fwrite(buffer, 1, bytes_received, fp);
+      }
+      printf("Inside zip receivance: after while");
       printf("File received successfully.\n");
+      fclose(fp);
     }
+  
 
-    fclose(fp);
-  } }
-
-  // Return the original client socket if no redirection occurred
+  // Return the modified socket descriptor
   return client_socket;
 }
+
 // Function to validate size argument
 bool validate_size_arg(int size, char * size_str) {
   if (size < THRESHOLD_LOW || size > THRESHOLD_HIGH) {
@@ -354,37 +334,40 @@ int main(int argc, char * argv[]) {
   struct hostent * he;
 
   if (argc != 2) {
-    fprintf(stderr, "Please input the client name and hostname\n");
+    fprintf(stderr, "Usage: %s <hostname>\n", argv[0]);
     exit(EXIT_FAILURE);
   }
 
   if ((he = gethostbyname(argv[1])) == NULL) {
-    fprintf(stderr, "Cannot get host name\n");
+    herror("gethostbyname");
     exit(EXIT_FAILURE);
   }
 
   // Create socket
-  if ((client_socket = socket(AF_INET, SOCK_STREAM, 0)) < 0) {
+  client_socket = socket(AF_INET, SOCK_STREAM, 0);
+  if (client_socket < 0) {
     perror("Socket creation failed");
     exit(EXIT_FAILURE);
   }
-  memset( & server_address, 0, sizeof(server_address));
-  // Specify server details
+
+  memset(&server_address, 0, sizeof(server_address));
   server_address.sin_family = AF_INET;
   server_address.sin_port = htons(PORT);
-  server_address.sin_addr = * ((struct in_addr * ) he -> h_addr);
+  server_address.sin_addr = *((struct in_addr *)he->h_addr);
 
   // Connect to server
-  if (connect(client_socket, (struct sockaddr * ) & server_address, sizeof(server_address)) < 0) {
+  if (connect(client_socket, (struct sockaddr *)&server_address, sizeof(server_address)) < 0) {
     perror("Connection failed");
     exit(EXIT_FAILURE);
   }
 
   while (1) {
-    // Get user input
-    char command[INPUT_THREASHOLD];
+    char command[INPUT_THREASHOLD]; 
     printf("clientw24$: ");
-    fgets(command, sizeof(command), stdin);
+    if (fgets(command, sizeof(command), stdin) == NULL) {
+      printf("Error or end of input, exiting.\n");
+      break; // Exit the loop if fgets fails (e.g., due to EOF or error)
+    }
 
     // Create a copy of the command for auditing
     char command_copy[INPUT_THREASHOLD];
@@ -392,17 +375,15 @@ int main(int argc, char * argv[]) {
     command_copy[INPUT_THREASHOLD - 1] = '\0'; // Ensure null-termination
 
     bool is_valid_command = audit_command(command_copy);
-    // Send command to server
-    if (is_valid_command)
-      send_command_to_server(client_socket, command); // Use original command here
-    else {
+    if (is_valid_command) {
+      send_command_to_server(client_socket, command); 
+      client_socket = receive_response_from_server(client_socket); // Ensure we handle the response
+    } else {
       printf("Invalid command. Please try again.\n");
-      continue; // Prompt for a new command
     }
 
-    // Receive response from server
-    client_socket = receive_response_from_server(client_socket);
   }
 
+  close(client_socket); // Close the socket when done.
   return 0;
 }
